@@ -3,6 +3,7 @@ import { FiBarChart2, FiSearch, FiTrendingUp, FiTrendingDown, FiChevronDown, FiC
 import DateInput from '../components/DateInput'
 import {
     getSalesByDateRange,
+    getPurchasesByDateRange,
     formatCurrency,
     getTodayStr,
     getDateNDaysAgo,
@@ -10,6 +11,7 @@ import {
 } from '../services/firebase'
 
 function Summary() {
+    const [summaryType, setSummaryType] = useState('sales') // 'sales' or 'purchases'
     const [startDate, setStartDate] = useState(getDateNDaysAgo(9))
     const [endDate, setEndDate] = useState(getTodayStr())
     const [summaryData, setSummaryData] = useState([])
@@ -30,7 +32,12 @@ function Summary() {
 
         setLoading(true)
         try {
-            const allSales = await getSalesByDateRange(startDate, endDate)
+            let records = []
+            if (summaryType === 'sales') {
+                records = await getSalesByDateRange(startDate, endDate)
+            } else {
+                records = await getPurchasesByDateRange(startDate, endDate)
+            }
 
             // สร้างวันทั้งหมดในช่วง
             const grouped = {}
@@ -38,15 +45,17 @@ function Summary() {
             const end = new Date(endDate + 'T00:00:00')
             for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
                 const key = d.toISOString().split('T')[0]
-                grouped[key] = { date: key, sales: [], totalCost: 0, totalSelling: 0, totalProfit: 0 }
+                grouped[key] = { date: key, records: [], totalCost: 0, totalSelling: 0, totalProfit: 0, totalWeight: 0 }
             }
 
-            allSales.forEach(sale => {
-                if (grouped[sale.saleDate]) {
-                    grouped[sale.saleDate].sales.push(sale)
-                    grouped[sale.saleDate].totalCost += sale.costPrice || 0
-                    grouped[sale.saleDate].totalSelling += sale.sellingPrice || 0
-                    grouped[sale.saleDate].totalProfit += sale.profit || 0
+            records.forEach(record => {
+                const dateKey = summaryType === 'sales' ? record.saleDate : record.receiveDate
+                if (grouped[dateKey]) {
+                    grouped[dateKey].records.push(record)
+                    grouped[dateKey].totalCost += record.costPrice || 0
+                    grouped[dateKey].totalSelling += record.sellingPrice || 0
+                    grouped[dateKey].totalProfit += record.profit || 0
+                    grouped[dateKey].totalWeight += record.weight || 0
                 }
             })
 
@@ -61,6 +70,14 @@ function Summary() {
         }
     }
 
+    // Effect to reload when summaryType changes (if already loaded)
+    React.useEffect(() => {
+        if (loaded) {
+            loadSummary()
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [summaryType])
+
     // Quick select shortcuts
     const setQuickRange = (days) => {
         setStartDate(getDateNDaysAgo(days - 1))
@@ -70,17 +87,37 @@ function Summary() {
     const grandTotalCost = summaryData.reduce((sum, d) => sum + d.totalCost, 0)
     const grandTotalSelling = summaryData.reduce((sum, d) => sum + d.totalSelling, 0)
     const grandTotalProfit = summaryData.reduce((sum, d) => sum + d.totalProfit, 0)
-    const totalItems = summaryData.reduce((sum, d) => sum + d.sales.length, 0)
-    const daysWithSales = summaryData.filter(d => d.sales.length > 0).length
+    const grandTotalWeight = summaryData.reduce((sum, d) => sum + d.totalWeight, 0)
+    const totalItems = summaryData.reduce((sum, d) => sum + d.records.length, 0)
+    const daysWithRecords = summaryData.filter(d => d.records.length > 0).length
 
     return (
         <div>
             {/* Header */}
             <div className="page-header animate-in">
                 <h1 className="page-title">
-                    <FiBarChart2 /> สรุปย้อนหลัง
+                    <FiBarChart2 /> สรุปย้อนหลัง ({summaryType === 'sales' ? 'ขายออก' : 'รับเข้า'})
                 </h1>
-                <p className="page-subtitle">เลือกช่วงวันที่เพื่อดูภาพรวมกำไร/ขาดทุน</p>
+                <p className="page-subtitle">เลือกช่วงวันที่และประเภทข้อมูล เพื่อดูภาพรวม</p>
+            </div>
+
+            {/* View Toggle */}
+            <div className="view-toggle animate-in" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
+                <button
+                    className={`btn ${summaryType === 'sales' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setSummaryType('sales')}
+                    disabled={loading}
+                >
+                    <FiTrendingUp /> สรุปการขายออก
+                </button>
+                <button
+                    className={`btn ${summaryType === 'purchases' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setSummaryType('purchases')}
+                    style={summaryType === 'purchases' ? { background: 'var(--blue)' } : {}}
+                    disabled={loading}
+                >
+                    <span style={{ transform: 'rotate(180deg)', display: 'inline-block' }}><FiTrendingUp /></span> สรุปการรับเข้า
+                </button>
             </div>
 
             {/* Date Range Picker */}
@@ -151,22 +188,40 @@ function Summary() {
                     <div className="stat-cards" style={{ marginBottom: '1.5rem' }}>
                         <div className="stat-card animate-in">
                             <div className="stat-card-label">จำนวนวันที่มีรายการ</div>
-                            <div className="stat-card-value">{daysWithSales}/{dayCount} วัน</div>
+                            <div className="stat-card-value">{daysWithRecords}/{dayCount} วัน</div>
                         </div>
                         <div className="stat-card animate-in">
                             <div className="stat-card-label">รายการทั้งหมด</div>
                             <div className="stat-card-value">{totalItems} รายการ</div>
                         </div>
-                        <div className="stat-card animate-in">
-                            <div className="stat-card-label">ยอดขายรวม</div>
-                            <div className="stat-card-value">{formatCurrency(grandTotalSelling)}</div>
-                        </div>
-                        <div className="stat-card animate-in">
-                            <div className="stat-card-label">กำไร/ขาดทุนรวม</div>
-                            <div className={`stat-card-value ${grandTotalProfit >= 0 ? 'profit' : 'loss'}`}>
-                                {grandTotalProfit >= 0 ? '+' : ''}{formatCurrency(grandTotalProfit)}
-                            </div>
-                        </div>
+
+                        {summaryType === 'sales' ? (
+                            <>
+                                <div className="stat-card animate-in">
+                                    <div className="stat-card-label">ยอดขายรวม</div>
+                                    <div className="stat-card-value">{formatCurrency(grandTotalSelling)}</div>
+                                </div>
+                                <div className="stat-card animate-in">
+                                    <div className="stat-card-label">กำไร/ขาดทุนรวม</div>
+                                    <div className={`stat-card-value ${grandTotalProfit >= 0 ? 'profit' : 'loss'}`}>
+                                        {grandTotalProfit >= 0 ? '+' : ''}{formatCurrency(grandTotalProfit)}
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="stat-card animate-in">
+                                    <div className="stat-card-label">ปริมาณรวมรับเข้า</div>
+                                    <div className="stat-card-value">{grandTotalWeight.toFixed(1)} กก.</div>
+                                </div>
+                                <div className="stat-card animate-in">
+                                    <div className="stat-card-label">ยอดทุนซื้อรวม</div>
+                                    <div className="stat-card-value" style={{ color: 'var(--loss-color)' }}>
+                                        {formatCurrency(grandTotalCost)}
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
 
                     <div className="table-container animate-in">
@@ -176,57 +231,69 @@ function Summary() {
                                     <th></th>
                                     <th>วันที่</th>
                                     <th>จำนวนรายการ</th>
-                                    <th>ยอดทุนรวม</th>
-                                    <th>ยอดขายรวม</th>
-                                    <th>กำไร/ขาดทุน</th>
-                                    <th>สถานะ</th>
+                                    <th>ยอดรวม (น.น.)</th>
+                                    <th>{summaryType === 'sales' ? 'ยอดทุนรวม' : 'ยอดทุนรวมรับเข้า'}</th>
+
+                                    {summaryType === 'sales' && (
+                                        <>
+                                            <th>ยอดขายรวม</th>
+                                            <th>กำไร/ขาดทุน</th>
+                                            <th>สถานะ</th>
+                                        </>
+                                    )}
                                 </tr>
                             </thead>
                             <tbody>
                                 {summaryData.map(day => (
                                     <React.Fragment key={day.date}>
                                         <tr
-                                            onClick={() => day.sales.length > 0 && setExpandedDate(expandedDate === day.date ? null : day.date)}
-                                            style={{ cursor: day.sales.length > 0 ? 'pointer' : 'default' }}
+                                            onClick={() => day.records.length > 0 && setExpandedDate(expandedDate === day.date ? null : day.date)}
+                                            style={{ cursor: day.records.length > 0 ? 'pointer' : 'default' }}
                                         >
                                             <td style={{ width: 30, textAlign: 'center' }}>
-                                                {day.sales.length > 0 && (
+                                                {day.records.length > 0 && (
                                                     expandedDate === day.date
                                                         ? <FiChevronUp style={{ color: 'var(--accent)' }} />
                                                         : <FiChevronDown style={{ color: 'var(--text-muted)' }} />
                                                 )}
                                             </td>
                                             <td>{formatThaiDate(day.date)}</td>
-                                            <td>{day.sales.length} รายการ</td>
+                                            <td>{day.records.length} รายการ</td>
+                                            <td>{day.totalWeight > 0 ? `${day.totalWeight.toFixed(1)} กก.` : '—'}</td>
                                             <td>{day.totalCost > 0 ? formatCurrency(day.totalCost) : '—'}</td>
-                                            <td>{day.totalSelling > 0 ? formatCurrency(day.totalSelling) : '—'}</td>
-                                            <td>
-                                                {day.sales.length > 0 ? (
-                                                    <span className={`badge ${day.totalProfit >= 0 ? 'badge-profit' : 'badge-loss'}`}>
-                                                        {day.totalProfit >= 0 ? '+' : ''}{formatCurrency(day.totalProfit)}
-                                                    </span>
-                                                ) : '—'}
-                                            </td>
-                                            <td>
-                                                {day.sales.length > 0 ? (
-                                                    day.totalProfit >= 0 ? (
-                                                        <span style={{ color: 'var(--profit-color)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                                            <FiTrendingUp /> กำไร
-                                                        </span>
-                                                    ) : (
-                                                        <span style={{ color: 'var(--loss-color)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                                            <FiTrendingDown /> ขาดทุน
-                                                        </span>
-                                                    )
-                                                ) : (
-                                                    <span style={{ color: 'var(--text-muted)' }}>ไม่มีรายการ</span>
-                                                )}
-                                            </td>
+
+                                            {summaryType === 'sales' && (
+                                                <>
+                                                    <td>{day.totalSelling > 0 ? formatCurrency(day.totalSelling) : '—'}</td>
+                                                    <td>
+                                                        {day.records.length > 0 ? (
+                                                            <span className={`badge ${day.totalProfit >= 0 ? 'badge-profit' : 'badge-loss'}`}>
+                                                                {day.totalProfit >= 0 ? '+' : ''}{formatCurrency(day.totalProfit)}
+                                                            </span>
+                                                        ) : '—'}
+                                                    </td>
+                                                    <td>
+                                                        {day.records.length > 0 ? (
+                                                            day.totalProfit >= 0 ? (
+                                                                <span style={{ color: 'var(--profit-color)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                                    <FiTrendingUp /> กำไร
+                                                                </span>
+                                                            ) : (
+                                                                <span style={{ color: 'var(--loss-color)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                                    <FiTrendingDown /> ขาดทุน
+                                                                </span>
+                                                            )
+                                                        ) : (
+                                                            <span style={{ color: 'var(--text-muted)' }}>ไม่มีรายการ</span>
+                                                        )}
+                                                    </td>
+                                                </>
+                                            )}
                                         </tr>
                                         {/* Detail rows */}
-                                        {expandedDate === day.date && day.sales.length > 0 && (
+                                        {expandedDate === day.date && day.records.length > 0 && (
                                             <tr>
-                                                <td colSpan="7" style={{ padding: 0, background: 'rgba(52, 211, 153, 0.03)' }}>
+                                                <td colSpan={summaryType === 'sales' ? "8" : "5"} style={{ padding: 0, background: 'rgba(52, 211, 153, 0.03)' }}>
                                                     <div style={{ padding: '0.75rem 1rem 0.75rem 2.5rem' }}>
                                                         <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent)', marginBottom: '0.5rem' }}>
                                                             📋 รายละเอียดวันที่ {formatThaiDate(day.date)}
@@ -235,28 +302,38 @@ function Summary() {
                                                             <thead>
                                                                 <tr>
                                                                     <th>#</th>
-                                                                    <th>ชื่อลูกค้า</th>
+                                                                    <th>{summaryType === 'sales' ? 'ชื่อลูกค้า' : 'ชื่อซัพพลายเออร์'}</th>
                                                                     <th>ชื่อสินค้า</th>
                                                                     <th>น.น. (กก.)</th>
-                                                                    <th>ราคาทุน</th>
-                                                                    <th>ราคาขาย</th>
-                                                                    <th>กำไร</th>
+                                                                    <th>{summaryType === 'sales' ? 'ราคาทุน' : 'ราคาทุนรวม'}</th>
+
+                                                                    {summaryType === 'sales' && (
+                                                                        <>
+                                                                            <th>ราคาขาย</th>
+                                                                            <th>กำไร</th>
+                                                                        </>
+                                                                    )}
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
-                                                                {day.sales.map((sale, idx) => (
-                                                                    <tr key={sale.id || idx}>
+                                                                {day.records.map((record, idx) => (
+                                                                    <tr key={record.id || idx}>
                                                                         <td>{idx + 1}</td>
-                                                                        <td>{sale.customerName}</td>
-                                                                        <td>{sale.productName}</td>
-                                                                        <td>{sale.weight}</td>
-                                                                        <td>{formatCurrency(sale.costPrice)}</td>
-                                                                        <td>{formatCurrency(sale.sellingPrice)}</td>
-                                                                        <td>
-                                                                            <span className={`badge ${sale.profit >= 0 ? 'badge-profit' : 'badge-loss'}`}>
-                                                                                {sale.profit >= 0 ? '+' : ''}{formatCurrency(sale.profit)}
-                                                                            </span>
-                                                                        </td>
+                                                                        <td>{summaryType === 'sales' ? record.customerName : record.supplierName}</td>
+                                                                        <td>{record.productName}</td>
+                                                                        <td>{record.weight}</td>
+                                                                        <td style={summaryType === 'purchases' ? { color: 'var(--loss-color)' } : {}}>{formatCurrency(record.costPrice)}</td>
+
+                                                                        {summaryType === 'sales' && (
+                                                                            <>
+                                                                                <td>{formatCurrency(record.sellingPrice)}</td>
+                                                                                <td>
+                                                                                    <span className={`badge ${record.profit >= 0 ? 'badge-profit' : 'badge-loss'}`}>
+                                                                                        {record.profit >= 0 ? '+' : ''}{formatCurrency(record.profit)}
+                                                                                    </span>
+                                                                                </td>
+                                                                            </>
+                                                                        )}
                                                                     </tr>
                                                                 ))}
                                                             </tbody>
@@ -273,14 +350,20 @@ function Summary() {
                                     <td></td>
                                     <td>รวมทั้งหมด</td>
                                     <td>{totalItems} รายการ</td>
-                                    <td>{formatCurrency(grandTotalCost)}</td>
-                                    <td>{formatCurrency(grandTotalSelling)}</td>
-                                    <td>
-                                        <span className={`badge ${grandTotalProfit >= 0 ? 'badge-profit' : 'badge-loss'}`}>
-                                            {grandTotalProfit >= 0 ? '+' : ''}{formatCurrency(grandTotalProfit)}
-                                        </span>
-                                    </td>
-                                    <td></td>
+                                    <td>{grandTotalWeight.toFixed(1)} กก.</td>
+                                    <td style={summaryType === 'purchases' ? { color: 'var(--loss-color)' } : {}}>{formatCurrency(grandTotalCost)}</td>
+
+                                    {summaryType === 'sales' && (
+                                        <>
+                                            <td>{formatCurrency(grandTotalSelling)}</td>
+                                            <td>
+                                                <span className={`badge ${grandTotalProfit >= 0 ? 'badge-profit' : 'badge-loss'}`}>
+                                                    {grandTotalProfit >= 0 ? '+' : ''}{formatCurrency(grandTotalProfit)}
+                                                </span>
+                                            </td>
+                                            <td></td>
+                                        </>
+                                    )}
                                 </tr>
                             </tfoot>
                         </table>
