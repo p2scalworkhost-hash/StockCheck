@@ -113,7 +113,6 @@ function Summary() {
                 <button
                     className={`btn ${summaryType === 'purchases' ? 'btn-primary' : 'btn-secondary'}`}
                     onClick={() => setSummaryType('purchases')}
-                    style={summaryType === 'purchases' ? { background: 'var(--blue)' } : {}}
                     disabled={loading}
                 >
                     <span style={{ transform: 'rotate(180deg)', display: 'inline-block' }}><FiTrendingUp /></span> สรุปการรับเข้า
