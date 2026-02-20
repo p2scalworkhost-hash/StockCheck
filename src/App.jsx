@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import SalesEntry from './pages/SalesEntry'
 import Summary from './pages/Summary'
 import Products from './pages/Products'
+import PurchaseEntry from './pages/PurchaseEntry'
 
 function App() {
     return (
@@ -13,6 +14,7 @@ function App() {
                 <Routes>
                     <Route path="/" element={<Dashboard />} />
                     <Route path="/sales" element={<SalesEntry />} />
+                    <Route path="/purchases" element={<PurchaseEntry />} />
                     <Route path="/summary" element={<Summary />} />
                     <Route path="/products" element={<Products />} />
                     <Route path="*" element={<Navigate to="/" replace />} />

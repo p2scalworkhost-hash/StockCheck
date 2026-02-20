@@ -57,6 +57,7 @@ export function formatThaiDate(dateStr) {
 // ─── Mock Data Layer (localStorage) ───
 
 const STORAGE_KEY = 'stock_webapp_meat_sales'
+const PURCHASE_STORAGE_KEY = 'stock_webapp_meat_purchases'
 
 function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
@@ -69,6 +70,15 @@ function getAllSales() {
 
 function saveSales(sales) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sales))
+}
+
+function getAllPurchases() {
+    const raw = localStorage.getItem(PURCHASE_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : []
+}
+
+function savePurchases(purchases) {
+    localStorage.setItem(PURCHASE_STORAGE_KEY, JSON.stringify(purchases))
 }
 
 // สร้าง Mock Data ย้อนหลัง 10 วัน
@@ -134,8 +144,57 @@ function seedMockData() {
     saveSales(mockSales)
 }
 
+function seedMockPurchasesData() {
+    if (localStorage.getItem(PURCHASE_STORAGE_KEY)) return // มีข้อมูลแล้ว ไม่ต้องสร้างใหม่
+
+    const suppliers = [
+        'ฟาร์มเฮียชัย', 'ซีพีเอฟ สาขา 1', 'ตลาดไท', 'เบทาโกร สาขาหลัก',
+        'บริษัท สหฟาร์ม จำกัด', 'ฟาร์มหมูเจริญ'
+    ]
+
+    const products = [
+        { name: 'เนื้อวัวสันใน', minW: 10, maxW: 50, cost: 350 },
+        { name: 'เนื้อวัวสันนอก', minW: 15, maxW: 60, cost: 500 },
+        { name: 'เนื้อวัวติดมัน', minW: 20, maxW: 80, cost: 600 },
+        { name: 'ซี่โครงหมู', minW: 10, maxW: 40, cost: 200 },
+        { name: 'สันคอหมู', minW: 15, maxW: 50, cost: 150 },
+        { name: 'หมูสามชั้น', minW: 20, maxW: 60, cost: 250 },
+        { name: 'อกไก่', minW: 20, maxW: 100, cost: 80 },
+        { name: 'น่องไก่', minW: 15, maxW: 80, cost: 100 },
+    ]
+
+    const mockPurchases = []
+
+    for (let dayOffset = 0; dayOffset < 10; dayOffset++) {
+        const date = getDateNDaysAgo(dayOffset)
+        // สุ่ม 1-4 รายการต่อวัน (การซื้อเข้าน้อยกว่าการขายออก)
+        const numPurchases = Math.floor(Math.random() * 4) + 1
+
+        for (let j = 0; j < numPurchases; j++) {
+            const supplier = suppliers[Math.floor(Math.random() * suppliers.length)]
+            const product = products[Math.floor(Math.random() * products.length)]
+
+            const weight = +(product.minW + Math.random() * (product.maxW - product.minW)).toFixed(1)
+            const costPrice = Math.round(weight * product.cost)
+
+            mockPurchases.push({
+                id: generateId(),
+                supplierName: supplier,
+                productName: product.name,
+                weight,
+                costPrice, // ทุนรวม
+                receiveDate: date,
+                createdAt: new Date(date + 'T' + String(8 + j).padStart(2, '0') + ':00:00').toISOString()
+            })
+        }
+    }
+
+    savePurchases(mockPurchases)
+}
+
 // เรียก seed ทันทีเมื่อโหลดไฟล์
 seedMockData()
+seedMockPurchasesData()
 
 // ─── CRUD Functions (Mock) ───
 
@@ -175,5 +234,44 @@ export async function deleteSale(saleId) {
     const sales = getAllSales()
     const filtered = sales.filter(s => s.id !== saleId)
     saveSales(filtered)
+    return true
+}
+
+// ─── Purchase CRUD Functions (Mock) ───
+
+export async function addPurchase(purchaseData) {
+    await new Promise(r => setTimeout(r, 300))
+    const purchases = getAllPurchases()
+    const newPurchase = {
+        ...purchaseData,
+        id: generateId(),
+        createdAt: new Date().toISOString()
+    }
+    purchases.unshift(newPurchase)
+    savePurchases(purchases)
+    return newPurchase
+}
+
+export async function getPurchasesByDate(dateStr) {
+    await new Promise(r => setTimeout(r, 200))
+    const purchases = getAllPurchases()
+    return purchases
+        .filter(p => p.receiveDate === dateStr)
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+}
+
+export async function getPurchasesByDateRange(startDate, endDate) {
+    await new Promise(r => setTimeout(r, 300))
+    const purchases = getAllPurchases()
+    return purchases
+        .filter(p => p.receiveDate >= startDate && p.receiveDate <= endDate)
+        .sort((a, b) => b.receiveDate.localeCompare(a.receiveDate))
+}
+
+export async function deletePurchase(purchaseId) {
+    await new Promise(r => setTimeout(r, 200))
+    const purchases = getAllPurchases()
+    const filtered = purchases.filter(p => p.id !== purchaseId)
+    savePurchases(filtered)
     return true
 }

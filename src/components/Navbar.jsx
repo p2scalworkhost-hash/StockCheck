@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { NavLink, Link } from 'react-router-dom'
-import { FiHome, FiEdit3, FiBarChart2, FiPackage, FiMenu, FiX } from 'react-icons/fi'
+import { FiHome, FiEdit3, FiBarChart2, FiPackage, FiMenu, FiX, FiDownload } from 'react-icons/fi'
 
 function Navbar() {
     const [menuOpen, setMenuOpen] = useState(false)
 
     const navItems = [
         { to: '/', label: 'Dashboard', icon: <FiHome /> },
-        { to: '/sales', label: 'บันทึกการขาย', icon: <FiEdit3 /> },
+        { to: '/sales', label: 'บันทึกขายออก', icon: <FiEdit3 /> },
+        { to: '/purchases', label: 'บันทึกรับเข้า', icon: <FiDownload /> },
         { to: '/summary', label: 'สรุปย้อนหลัง', icon: <FiBarChart2 /> },
         { to: '/products', label: 'สรุปสินค้า', icon: <FiPackage /> }
     ]
